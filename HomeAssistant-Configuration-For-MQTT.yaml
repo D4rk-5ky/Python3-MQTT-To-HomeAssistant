@@ -1,0 +1,11 @@
+mqtt:
+  binary_sensor:
+  - name: "Python MQTT Test"
+    state_topic: "home-assistant/PytonMQTTTest/command"
+    payload_on: "ON"
+    availability:
+      - topic: "home-assistant/PytonMQTTTest/available"
+        payload_available: "online"
+        payload_not_available: "offline"
+    qos: 0
+    value_template: "{{ value_json.state }}"
