@@ -119,30 +119,37 @@ def MailTo(logger, error_logger, recipient, subject):
     # Define subject
     #subject = "Error snapshotting or cleaning up snapshots/logs - attaching logs"
 
-    # Get the latest .log and .err files
-    newest_log, newest_err = get_newest_files(log_folder, "MQTT-To-HomeAssistant-Date")
+    # Prepare the list for attachment files
     attachment_files = []
     
+    # Get the latest .log and .err files
+    if log_folder.upper() != "NO":
+        newest_log, newest_err = get_newest_files(log_folder, "MQTT-To-HomeAssistant-Date")
+
+        # Add the latest .log and .err files to the attachment list
+        if newest_log:
+            attachment_files.append(newest_log)
+        if newest_err:
+            attachment_files.append(newest_err)
+
     # Start by creating an empty body
     body = ""
     
-    # Add the latest .log and .err files to the attachment list
-    if newest_log:
-        attachment_files.append(newest_log)
-    if newest_err:
-        attachment_files.append(newest_err)
+    
+    if log_folder.upper() != "NO":
+        # Read contents of .err file if not empty
+        if os.path.exists(err_filepath) and not os.path.getsize(err_filepath) == 0:
+            with open(newest_err, 'r') as err_file:
+                err_contents = err_file.read()
+                body += "----------\n\n.err file\n" + err_contents
 
-     # Read contents of .err file if not empty
-    if os.path.exists(err_filepath) and not os.path.getsize(err_filepath) == 0:
-        with open(newest_err, 'r') as err_file:
-            err_contents = err_file.read()
-            body += "----------\n\n.err file\n" + err_contents
-
-    # Read contents of .log file
-    if os.path.isfile(newest_log):
-        with open(newest_log, 'r') as log_file:
-            log_contents = log_file.read()
-            body += "----------\n\n.log file\n" + log_contents
+        # Read contents of .log file
+        if os.path.isfile(newest_log):
+            with open(newest_log, 'r') as log_file:
+                log_contents = log_file.read()
+                body += "----------\n\n.log file\n" + log_contents
+    else:
+        body += "----------\n\n" + "Logs has beend disabled, enable if nessecary"
 
     # Send the Mail
     mail_exit_code, stderr_output = send_mail(subject, body, recipient, attachment_files)
@@ -239,14 +246,18 @@ def main():
     # Check if it is for homeassistant
     Use_HomeAssistant = (config.get('MQTT-To-HomeAssistant', 'Use_HomeAssistant'))
 
-    # Origional Log creation from SnapBeforeWatchTower.py
-    #log_date = datetime.datetime.now().strftime('%Y-%m-%d_%H_%M_%S')
-    #log_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
-
     os.makedirs(log_folder, exist_ok=True)
 
-    # Create separate loggers for main logs and error logs
-    logger, error_logger = setup_logger(log_folder, log_date)
+    # Check if logging is enabled and enable if it is
+    if log_folder.upper() != "NO":
+        os.makedirs(log_folder, exist_ok=True)
+
+        # Create separate loggers for main logs and error logs
+        logger, error_logger = setup_logger(log_folder, log_date)
+    else:
+        # If logging is disabled, set up dummy loggers
+        logger = logging.getLogger("dummy_logger")
+        error_logger = logging.getLogger("dummy_error_logger")
 
     try:
         # Your MQTT logic here
@@ -301,12 +312,13 @@ def main():
         error_logger.exception("An error occurred:")
         print_separator(logger, error_logger)
         if not MailOption.upper() == "NO":
-            MailTo(logger, error_logger, MailOption)
+            MailTo(logger, error_logger, MailOption, "Error pls check or enable logs if nessesary")
 
     finally:
         # Check if the .err file is empty, and remove it if it is
-        if os.path.exists(err_filepath) and os.path.getsize(err_filepath) == 0:
-            os.remove(err_filepath)
+        if log_folder.upper() != "NO":
+            if os.path.exists(err_filepath) and os.path.getsize(err_filepath) == 0:
+                os.remove(err_filepath)
 
 if __name__ == "__main__":
     main()
