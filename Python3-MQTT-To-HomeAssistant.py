@@ -178,8 +178,9 @@ def WasMailSent(logger, error_logger, MailExitCode, popenstderr=None):
 def SystemAction(logger, error_logger):
     global MailOption
     global SystemOption
+
     if not MailOption.upper() == "NO":
-        print_separator(logger, error_logger)
+        print_separator(logger)
         logger.info('The system has an option after the script finishes')
         logger.info('')
         logger.info('The options is')
@@ -189,7 +190,7 @@ def SystemAction(logger, error_logger):
         logger.info('Gonna sleep for 2 minutes to insure mail is sent')
         logger.info('')
         logger.info('Then execute the command	:	' + SystemOption)
-        print_separator(logger, error_logger)
+        print_separator(logger)
 
         # Sleep before executing the desired action
         time.sleep(120)
@@ -197,7 +198,7 @@ def SystemAction(logger, error_logger):
         os.system(SystemOption)
 
     elif not SystemOption.upper() == "NO" and MailOption.upper() == "NO":
-        print_separator(logger, error_logger)
+        print_separator(logger)
         logger.info('The system has an option after the script finishes')
         logger.info('')
         logger.info('The options is')
@@ -207,7 +208,7 @@ def SystemAction(logger, error_logger):
         logger.info('No mail option chosen')
         logger.info('')
         logger.info('Gonna execute the command	:	' + SystemOption)
-        print_separator(logger, error_logger)
+        print_separator(logger)
 
         os.system(SystemOption)
 
@@ -282,7 +283,6 @@ def main():
                 # Add your specific error handling code here
             else:
                 logging.error(f'Failed to connect to MQTT broker: {str(e)}')
-            raise Exception('Failed publishing message to MQTT')
 
         # Optionally, send a message if HomeAssistant is an option
         if Use_HomeAssistant.upper() == "YES":
@@ -302,7 +302,7 @@ def main():
 
         # Decide if there is a shutdown action for the system on succesfull comletion
         if not SystemOption.upper() == "NO":
-            SystemAction()
+            SystemAction(logger, error_logger)
 
     except Exception as e:
         print_separator(logger, error_logger)
