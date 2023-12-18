@@ -8,6 +8,7 @@ import logging
 import datetime
 import glob
 import paho.mqtt.client as mqtt
+import time
 
 class CustomLogger(logging.Logger):
     def __init__(self, name, log_filename):
@@ -52,9 +53,7 @@ def setup_logger(log_folder, log_date):
 def mqtt_connect(client, userdata, flags, rc, mqtt_topic, mqtt_message, logger, error_logger):
     try:
         if rc == 0:
-            logger.info('')
-            logger.info('----------')
-            logger.info('')
+            print_separator(logger)
             logger.info('Publishing Topic and Message to MQTT')
 
             # Publish the message after connecting
@@ -69,11 +68,8 @@ def mqtt_connect(client, userdata, flags, rc, mqtt_topic, mqtt_message, logger, 
     except Exception as e:
         # Handle the exception and capture the error message
         error_message = str(e)
-        logger.error('')
-        logger.error('----------')
-        logger.error('')
-        logger.error('MQTT Error message: ' + error_message)
-        raise Exception('Failed publishing message to MQTT')
+        print_separator(logger, error_logger)
+        error_logger.error('MQTT Error message: ' + error_message)
 
 def get_newest_files(log_dir, prefix):
     files = glob.glob(os.path.join(log_dir, f"{prefix}*"))
@@ -91,6 +87,8 @@ def get_newest_files(log_dir, prefix):
         
         if newest_log and newest_err:
             break
+    
+    return newest_log, newest_err
 
 # This is is for the send mail part
 def send_mail(subject, body, recipient, attachment_files=None):
@@ -111,18 +109,18 @@ def send_mail(subject, body, recipient, attachment_files=None):
 # In case one needs to be notified of errors
 #
 # FIx and make sure to make it possible to send error message even if .out file is not created yet
-def MailTo(logger, error_logger, recipient):
-    log_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+def MailTo(logger, error_logger, recipient, subject):
+    #log_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
     
     print_separator(logger)
 
     logger.info('There is an option to send a mail')
 
     # Define subject
-    subject = "Error snapshotting or cleaning up snapshots/logs - attaching logs"
+    #subject = "Error snapshotting or cleaning up snapshots/logs - attaching logs"
 
     # Get the latest .log and .err files
-    newest_log, newest_err = get_newest_files(log_folder, "SnapBeforeWatchTower")
+    newest_log, newest_err = get_newest_files(log_folder, "MQTT-To-HomeAssistant-Date")
     attachment_files = []
     
     # Start by creating an empty body
@@ -134,8 +132,8 @@ def MailTo(logger, error_logger, recipient):
     if newest_err:
         attachment_files.append(newest_err)
 
-     # Read contents of .err file
-    if os.path.isfile(newest_err):
+     # Read contents of .err file if not empty
+    if os.path.exists(err_filepath) and not os.path.getsize(err_filepath) == 0:
         with open(newest_err, 'r') as err_file:
             err_contents = err_file.read()
             body += "----------\n\n.err file\n" + err_contents
@@ -150,11 +148,11 @@ def MailTo(logger, error_logger, recipient):
     mail_exit_code, stderr_output = send_mail(subject, body, recipient, attachment_files)
                 
     if mail_exit_code == 0:
-        WasMailSent(logger, error_logger, 0, "")
+        WasMailSent(logger, error_logger, 0)
     else:
         WasMailSent(logger, error_logger, mail_exit_code, stderr_output)
 
-def WasMailSent(logger, error_logger, MailExitCode, popenstderr):
+def WasMailSent(logger, error_logger, MailExitCode, popenstderr=None):
     if MailExitCode == 0:
         print_separator(logger)
         logger.info('Mail was send succesfully')
@@ -164,8 +162,43 @@ def WasMailSent(logger, error_logger, MailExitCode, popenstderr):
         error_logger.error('This is what popen said')
         error_logger.error('')
         error_logger.error(popenstderr)
-        error_logger.error('')
-        error_logger.error('----------')
+        print_separator(logger, error_logger)
+
+def SystemAction(logger, error_logger):
+    global MailOption
+    global SystemOption
+    if not MailOption.upper() == "NO":
+        print_separator(logger, error_logger)
+        logger.info('The system has an option after the script finishes')
+        logger.info('')
+        logger.info('The options is')
+        logger.info('')
+        logger.info(SystemOption)
+        logger.info('')
+        logger.info('Gonna sleep for 2 minutes to insure mail is sent')
+        logger.info('')
+        logger.info('Then execute the command	:	' + SystemOption)
+        print_separator(logger, error_logger)
+
+        # Sleep before executing the desired action
+        time.sleep(120)
+
+        os.system(SystemOption)
+
+    elif not SystemOption.upper() == "NO" and MailOption.upper() == "NO":
+        print_separator(logger, error_logger)
+        logger.info('The system has an option after the script finishes')
+        logger.info('')
+        logger.info('The options is')
+        logger.info('')
+        logger.info(SystemOption)
+        logger.info('')
+        logger.info('No mail option chosen')
+        logger.info('')
+        logger.info('Gonna execute the command	:	' + SystemOption)
+        print_separator(logger, error_logger)
+
+        os.system(SystemOption)
 
 def print_separator(logger, error_logger=None):
     separator_length = 20
@@ -178,17 +211,21 @@ def print_separator(logger, error_logger=None):
 
 def main():
     global err_filepath  # Use the global variable
+    global MailOption
+    global SystemOption
+    global log_folder
+
     parser = argparse.ArgumentParser(description='Send a message to HomeAssistant with MQTT')
     parser.add_argument('-c', '--config', required=True, help='Command: Location for config file')
     
     args = parser.parse_args()
 
     config = configparser.RawConfigParser()
-    config.read(args.conf)
+    config.read(args.config)
 
     # This is for creating the Date format for the Log Files
     DateTime = config.get('MQTT-To-HomeAssistant', 'DateTime')
-    log_date  = datetime.datetime.now().strftime(DateTime)
+    log_date = datetime.datetime.now().strftime(DateTime)
 
     # This is for the logfile creation
     log_folder=config.get('MQTT-To-HomeAssistant', 'LogDestination')
@@ -197,7 +234,7 @@ def main():
     MailOption = (config.get('MQTT-To-HomeAssistant', 'Mail'))
 
     # This is for the command after the script has succesfully run
-    SystemAction = (config.get('MQTT-To-HomeAssistant', 'SystemAction'))
+    SystemOption = (config.get('MQTT-To-HomeAssistant', 'SystemAction'))
 
     # Check if it is for homeassistant
     Use_HomeAssistant = (config.get('MQTT-To-HomeAssistant', 'Use_HomeAssistant'))
@@ -240,7 +277,7 @@ def main():
             raise Exception('Failed publishing message to MQTT')
 
         # Optionally, send a message if HomeAssistant is an option
-        if Use_HomeAssistant.upper == "YES":
+        if Use_HomeAssistant.upper() == "YES":
             homeassistant_topic = config.get('MQTT-To-HomeAssistant', 'HomeAssistant_Available')
             homeassistant_message = "online"
             client.publish(homeassistant_topic, homeassistant_message, retain=True)
@@ -253,10 +290,10 @@ def main():
 
         # Decide if there is an option to send mail
         if not MailOption.upper() == "NO":
-            MailTo(0)
+            MailTo(logger, error_logger, MailOption, "Succesfully send MQTT message")
 
         # Decide if there is a shutdown action for the system on succesfull comletion
-        if not SystemAction.upper() == "NO":
+        if not SystemOption.upper() == "NO":
             SystemAction()
 
     except Exception as e:
@@ -264,7 +301,7 @@ def main():
         error_logger.exception("An error occurred:")
         print_separator(logger, error_logger)
         if not MailOption.upper() == "NO":
-            MailTo(logger, error_logger, args.send_mail)
+            MailTo(logger, error_logger, MailOption)
 
     finally:
         # Check if the .err file is empty, and remove it if it is
