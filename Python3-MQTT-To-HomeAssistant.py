@@ -17,13 +17,13 @@ class CustomLogger(logging.Logger):
         # Set up formatter for log messages
         formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 
-        # Set up log file handler
-        file_handler = logging.FileHandler(log_filename)
-        file_handler.setLevel(logging.INFO)
-        file_handler.setFormatter(formatter)
-        self.addHandler(file_handler)
+        # Set up log file handler only if log_filename is provided
+        if log_filename:
+            file_handler = logging.FileHandler(log_filename)
+            file_handler.setLevel(logging.INFO)
+            file_handler.setFormatter(formatter)
+            self.addHandler(file_handler)
 
-        # Set up console handler
         console_handler = logging.StreamHandler()
         console_handler.setLevel(logging.INFO)
         console_handler.setFormatter(formatter)
@@ -32,7 +32,7 @@ class CustomLogger(logging.Logger):
 def setup_logger(log_folder, log_date):
     global err_filepath  # Use the global variable
     log_filename = f"MQTT-To-HomeAssistant-Date{log_date}.log"
-    log_filepath = os.path.join(log_folder, log_filename)
+    log_filepath = os.path.join(log_folder, log_filename) if log_folder.lower() != "no" else None
 
     # Set up logger for normal output
     logger = CustomLogger("MQTT-To-HomeAssistant-Date", log_filepath)
@@ -42,7 +42,7 @@ def setup_logger(log_folder, log_date):
 
     # Set up logger for errors
     err_filename = f"MQTT-To-HomeAssistant-Date{log_date}.err"
-    err_filepath = os.path.join(log_folder, err_filename)
+    err_filepath = os.path.join(log_folder, err_filename) if log_folder.lower() != "no" else None
     error_logger = CustomLogger("MQTT-To-HomeAssistant-Date-Error", err_filepath)
 
     # Set the error logger level
@@ -248,16 +248,8 @@ def main():
 
     os.makedirs(log_folder, exist_ok=True)
 
-    # Check if logging is enabled and enable if it is
-    if log_folder.upper() != "NO":
-        os.makedirs(log_folder, exist_ok=True)
-
-        # Create separate loggers for main logs and error logs
-        logger, error_logger = setup_logger(log_folder, log_date)
-    else:
-        # If logging is disabled, set up dummy loggers
-        logger = logging.getLogger("dummy_logger")
-        error_logger = logging.getLogger("dummy_error_logger")
+    # Create separate loggers for main logs and error logs
+    logger, error_logger = setup_logger(log_folder, log_date)
 
     try:
         # Your MQTT logic here
@@ -316,8 +308,7 @@ def main():
 
     finally:
         # Check if the .err file is empty, and remove it if it is
-        if log_folder.upper() != "NO":
-            if os.path.exists(err_filepath) and os.path.getsize(err_filepath) == 0:
+            if log_folder.upper() != "NO" and os.path.exists(err_filepath) and os.path.getsize(err_filepath) == 0:
                 os.remove(err_filepath)
 
 if __name__ == "__main__":
